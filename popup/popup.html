@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <title>Keka Time Tracker</title>
+  <link rel="stylesheet" href="popup.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+</head>
+
+<body>
+  <div class="card">
+    <div class="header">
+      <div class="title">⏰ Keka Effective Hourss</div>
+      <div class="sub">🎯 Target: 8h 15m</div>
+    </div>
+
+    <div class="profile-section">
+      <div id="profilePic" class="avatar"></div>
+      <div class="profile-info">
+        <div id="profileName" class="pname">Hi —</div>
+        <div id="profileRole" class="prole">Role —</div>
+      </div>
+    </div>
+
+    <div class="metrics">
+      <div id="worked" class="metric">🕓 Worked: —</div>
+      <div id="remaining" class="metric">⏳ Remaining: —</div>
+      <div id="gross" class="metric">🧩 Gross: —</div>
+      <div id="stayTill" class="metric small">🏢 Stay Till: —</div>
+    </div>
+
+    <div class="progress-container">
+      <div class="progress-header">
+        <span class="progress-title">Effective Progress</span>
+        <span id="progressLabel" class="progress-percentage">0%</span>
+      </div>
+      <div id="progressBar" class="progress-bar">
+        <div id="progressFill" class="progress-fill"></div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button id="refresh" class="btn">🔄 Refresh</button>
+      <button id="openKeka" class="btn ghost">Open Keka</button>
+    </div>
+
+    <div id="debug" class="debug" style="display: none"></div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+
+</html>
