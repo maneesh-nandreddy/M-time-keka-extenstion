@@ -196,6 +196,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           fetchKekaData(),
           fetchProfile()
         ]);
+        // Background sync salary data if possible
+        syncSalaryWithDB().catch(e => console.error("[sync-salary-silent-error]", e));
         sendResponse({ hours, profile });
         return;
       }
@@ -301,6 +303,31 @@ async function fetchKekaData() {
     baseHours: parseFloat(last.totalEffectiveHours || 0),
     lastPunchInMs: isIn && lastPunchIn ? lastPunchIn.getTime() : null
   };
+}
+
+async function syncSalaryWithDB() {
+  const token = await getToken();
+  if (!token) return;
+
+  try {
+    const resp = await fetch("https://niruthi.keka.com/k/payroll/api/myfinances/paytimelines", {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!resp.ok) return;
+
+    const data = await resp.json();
+    if (!data.succeeded || !data.data) return;
+
+    // Send to local proxy server
+    await fetch("http://localhost:3000/api/sync-salary", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ data: data.data })
+    });
+    console.log("[keka-bg] salary synced to DB");
+  } catch (err) {
+    console.warn("[keka-bg] salary sync failed (is server running?)", err);
+  }
 }
 
 function toHHMM(decimal) {
