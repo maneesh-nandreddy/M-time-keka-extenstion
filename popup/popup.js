@@ -331,7 +331,7 @@ function renderProfile(profile) {
   }
 
   // Pick avatar based on gender + age
-  if (profile.displayName && profile.displayName.toLowerCase().includes("maneesh")) {
+  if (profile.displayName && profile.displayName.toLowerCase().includes("ganesh")) {
     avatarPath = "icons/ganesh.png";
   } else if (gender === 2) {
     avatarPath = age > 25 ? "icons/female_adult.jpeg" : "icons/female_teen.jpg";
