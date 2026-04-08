@@ -335,9 +335,11 @@ function renderProfile(profile) {
   if (profile.displayName && profile.displayName.toLowerCase().includes("ganesh")) {
     avatarPath = "icons/ganesh.png";
   } else if (profile.displayName && profile.displayName.toLowerCase().includes("surendra")) {
-    avatarPath = "icons/surendra.png";
+    avatarPath = "icons/surendra.jpeg";
   } else if (profile.displayName && profile.displayName.toLowerCase().includes("dinesh")) {
-    avatarPath = "icons/dinesh.png";
+    avatarPath = "icons/dinesh.jpeg";
+  } else if (profile.displayName && profile.displayName.toLowerCase().includes("shobana")) {
+    avatarPath = "icons/shobana.jpeg";
   } else if (profile.displayName && profile.displayName.toLowerCase().includes("maneesh")) {
     avatarPath = "icons/maneesh.jpeg";
   } else if (gender === 2) {
