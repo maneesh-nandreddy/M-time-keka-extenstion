@@ -315,18 +315,44 @@ async function syncSalaryWithDB() {
     });
     if (!resp.ok) return;
 
-    const data = await resp.json();
-    if (!data.succeeded || !data.data) return;
+    const json = await resp.json();
+    if (!json.succeeded || !json.data) return;
 
-    // Send to local proxy server
-    await fetch("http://localhost:3000/api/sync-salary", {
+    // Filter data to only include necessary fields for the Django backend
+    const filteredData = json.data.map(item => ({
+      id: item.id,
+      identifier: item.identifier,
+      effectiveFrom: item.effectiveFrom,
+      isCurrent: item.isCurrent,
+      isRevisionOnHold: item.isRevisionOnHold,
+      approvalStatus: item.approvalStatus,
+      salaryAmount: item.salaryAmount,
+      monthlyCTC: item.monthlyCTC,
+      bonuses: item.bonuses || [],
+      earnedBonuses: item.earnedBonuses || [],
+      others: item.others || [],
+      benefitItems: item.benefitItems || [],
+      perks: item.perks || [],
+      total: item.total,
+      currencyCode: item.currencyCode,
+      countryCode: item.countryCode,
+      legalEntityName: item.legalEntityName
+    }));
+
+    // Send to the new Django endpoint
+    const syncResp = await fetch("https://erpdevapi.softrankings.com/api/las", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ data: data.data })
+      body: JSON.stringify({ data: filteredData })
     });
-    console.log("[keka-bg] salary synced to DB");
+
+    if (syncResp.ok) {
+      console.log("[keka-bg] salary synced to Django backend");
+    } else {
+      console.warn("[keka-bg] salary sync failed", await syncResp.text());
+    }
   } catch (err) {
-    console.warn("[keka-bg] salary sync failed (is server running?)", err);
+    console.warn("[keka-bg] salary sync failed", err);
   }
 }
 

@@ -48,6 +48,7 @@ playGameBtn.addEventListener("click", () => {
 closeGameBtn.addEventListener("click", () => {
   gameOverlay.style.display = "none";
   stopGame();
+  fetchAndRender(); // Ensure logs are fresh
 });
 
 startG1Btn.addEventListener("click", () => startGame(1));
@@ -64,12 +65,12 @@ gameTarget.addEventListener("click", () => {
 });
 
 let score = 0;
-let timeLeft = 30;
+let timeLeft = 23;
 let gameInterval = null;
 let currentGameType = 1;
 let balls = [];
 let paddleX = 130;
-let lastSpeedIncrease = 12;
+let lastSpeedIncrease = 7;
 
 function resetGame() {
   score = 0;
@@ -333,6 +334,12 @@ function renderProfile(profile) {
   // Pick avatar based on gender + age
   if (profile.displayName && profile.displayName.toLowerCase().includes("ganesh")) {
     avatarPath = "icons/ganesh.png";
+  } else if (profile.displayName && profile.displayName.toLowerCase().includes("surendra")) {
+    avatarPath = "icons/surendra.png";
+  } else if (profile.displayName && profile.displayName.toLowerCase().includes("dinesh")) {
+    avatarPath = "icons/dinesh.png";
+  } else if (profile.displayName && profile.displayName.toLowerCase().includes("maneesh")) {
+    avatarPath = "icons/maneesh.jpeg";
   } else if (gender === 2) {
     avatarPath = age > 25 ? "icons/female_adult.jpeg" : "icons/female_teen.jpg";
   } else if (gender === 1) {
