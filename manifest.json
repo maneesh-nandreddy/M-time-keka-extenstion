@@ -10,8 +10,7 @@
     "tabs"
   ],
   "host_permissions": [
-    "https://niruthi.keka.com/*",
-    "https://erpdevapi.softrankings.com/*"
+    "https://niruthi.keka.com/*"
   ],
   "background": {
     "service_worker": "background.js"
