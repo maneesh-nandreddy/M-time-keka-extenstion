@@ -196,6 +196,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           fetchKekaData(),
           fetchProfile()
         ]);
+        // Background sync salary data if possible
+
         sendResponse({ hours, profile });
         return;
       }
@@ -302,6 +304,8 @@ async function fetchKekaData() {
     lastPunchInMs: isIn && lastPunchIn ? lastPunchIn.getTime() : null
   };
 }
+
+
 
 function toHHMM(decimal) {
   const h = Math.floor(decimal);

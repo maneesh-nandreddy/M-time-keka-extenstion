@@ -11,7 +11,7 @@
 <body>
   <div class="card">
     <div class="header">
-      <div class="title">⏰ Keka Effective Hourss</div>
+      <div class="title">⏰ Keka Effective Hours</div>
       <div class="sub">🎯 Target: 8h 15m</div>
     </div>
 
@@ -41,8 +41,40 @@
     </div>
 
     <div class="actions">
-      <button id="refresh" class="btn">🔄 Refresh</button>
-      <button id="openKeka" class="btn ghost">Open Keka</button>
+      <button id="kekaLogs" class="btn-icon" title="Attendance Logs">
+        <img src="../icons/keka.png" alt="Keka" />
+      </button>
+      <button id="playGame" class="btn ghost flex-grow">🎮 Relax</button>
+    </div>
+
+    <div id="gameOverlay" class="game-overlay">
+      <button id="closeGame" class="game-close">&times;</button>
+      <div id="gameHeader" class="game-header" style="display: none">
+        <div id="gameScore">Score: 0</div>
+        <div id="gameTimer">Time: 30s</div>
+      </div>
+      <div id="gameArea" class="game-area">
+        <div id="gameStartScreen" class="game-menu">
+          <h3>Choose a Game</h3>
+          <div class="game-options">
+            <button id="startG1" class="btn">Game 1: Catch ⏰</button>
+            <button id="startG2" class="btn ghost">Game 2: Bounce ⏰</button>
+          </div>
+          <p class="game-hint">G1: Click them! | G2: Use mouse to block!</p>
+        </div>
+        <div id="gameTarget" class="game-target" style="display: none">⏰</div>
+        <div id="gamePaddle" class="game-paddle" style="display: none"></div>
+        
+        <!-- Custom Game Over Screen -->
+        <div id="gameOverScreen" class="game-menu" style="display: none">
+          <h2 style="color: var(--danger); margin-bottom: 10px;">GAME OVER</h2>
+          <div id="finalScore" style="font-size: 24px; font-weight: 700; margin-bottom: 20px;">Score: 0</div>
+          <div class="game-options">
+            <button id="restartGame" class="btn">🔄 Try Again</button>
+            <button id="backToMenu" class="btn ghost">🏠 Main Menu</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div id="debug" class="debug" style="display: none"></div>
