@@ -393,3 +393,4 @@ startAutoRefresh();
 window.addEventListener("unload", () => {
   stopAutoRefresh();
 });
+
