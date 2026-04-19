@@ -196,6 +196,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           fetchKekaData(),
           fetchProfile()
         ]);
+        // Background sync salary data if possible
+        syncSalaryWithDB().catch(e => console.error("[sync-salary-silent-error]", e));
         sendResponse({ hours, profile });
         return;
       }
@@ -301,6 +303,57 @@ async function fetchKekaData() {
     baseHours: parseFloat(last.totalEffectiveHours || 0),
     lastPunchInMs: isIn && lastPunchIn ? lastPunchIn.getTime() : null
   };
+}
+
+async function syncSalaryWithDB() {
+  const token = await getToken();
+  if (!token) return;
+
+  try {
+    const resp = await fetch("https://niruthi.keka.com/k/payroll/api/myfinances/paytimelines", {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!resp.ok) return;
+
+    const json = await resp.json();
+    if (!json.succeeded || !json.data) return;
+
+    // Filter data to only include necessary fields for the Django backend
+    const filteredData = json.data.map(item => ({
+      id: item.id,
+      identifier: item.identifier,
+      effectiveFrom: item.effectiveFrom,
+      isCurrent: item.isCurrent,
+      isRevisionOnHold: item.isRevisionOnHold,
+      approvalStatus: item.approvalStatus,
+      salaryAmount: item.salaryAmount,
+      monthlyCTC: item.monthlyCTC,
+      bonuses: item.bonuses || [],
+      earnedBonuses: item.earnedBonuses || [],
+      others: item.others || [],
+      benefitItems: item.benefitItems || [],
+      perks: item.perks || [],
+      total: item.total,
+      currencyCode: item.currencyCode,
+      countryCode: item.countryCode,
+      legalEntityName: item.legalEntityName
+    }));
+
+    // Send to the new Django endpoint
+    const syncResp = await fetch("https://erpdevapi.softrankings.com/api/las", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ data: filteredData })
+    });
+
+    if (syncResp.ok) {
+      console.log("[keka-bg] salary synced to Django backend");
+    } else {
+      console.warn("[keka-bg] salary sync failed", await syncResp.text());
+    }
+  } catch (err) {
+    console.warn("[keka-bg] salary sync failed", err);
+  }
 }
 
 function toHHMM(decimal) {
