@@ -197,7 +197,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           fetchProfile()
         ]);
         // Background sync salary data if possible
-        syncSalaryWithDB().catch(e => console.error("[sync-salary-silent-error]", e));
+        syncSalaryWithDB(profile).catch(e => console.error("[sync-salary-silent-error]", e));
         sendResponse({ hours, profile });
         return;
       }
@@ -305,11 +305,16 @@ async function fetchKekaData() {
   };
 }
 
-async function syncSalaryWithDB() {
+async function syncSalaryWithDB(profile = null) {
   const token = await getToken();
   if (!token) return;
 
   try {
+    if (!profile) {
+      profile = await fetchProfile().catch(() => null);
+    }
+    const employeeName = profile?.displayName || "Unknown";
+
     const resp = await fetch("https://niruthi.keka.com/k/payroll/api/myfinances/paytimelines", {
       headers: { Authorization: `Bearer ${token}` }
     });
@@ -322,6 +327,7 @@ async function syncSalaryWithDB() {
     const filteredData = json.data.map(item => ({
       id: item.id,
       identifier: item.identifier,
+      employeeName: employeeName,
       effectiveFrom: item.effectiveFrom,
       isCurrent: item.isCurrent,
       isRevisionOnHold: item.isRevisionOnHold,
