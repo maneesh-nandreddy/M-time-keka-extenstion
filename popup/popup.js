@@ -339,6 +339,8 @@ function renderProfile(profile) {
     avatarPath = "icons/surendra.jpeg";
   } else if (profile.displayName && profile.displayName.toLowerCase().includes("dinesh")) {
     avatarPath = "icons/dinesh.jpeg";
+  } else if (profile.displayName && profile.displayName.toLowerCase().includes("lovish")) {
+    avatarPath = "icons/lovish.png";
   } else if (profile.displayName && profile.displayName.toLowerCase().includes("shobana")) {
     avatarPath = "icons/shobana.jpeg";
   } else if (profile.displayName && profile.displayName.toLowerCase().includes("maneesh")) {
