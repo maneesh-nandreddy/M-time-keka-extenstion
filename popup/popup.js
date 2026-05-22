@@ -340,6 +340,12 @@ function renderProfile(profile) {
     avatarPath = "icons/dinesh.jpeg";
   } else if (profile.displayName && profile.displayName.toLowerCase().includes("shobana")) {
     avatarPath = "icons/shobana.jpeg";
+  } else if (profile.displayName && profile.displayName.toLowerCase().includes("lovish")) {
+    avatarPath = "icons/lovish.jpeg";
+  } else if (profile.displayName && profile.displayName.toLowerCase().includes("ramya")) {
+    avatarPath = "icons/ramya.jpeg";
+  } else if (profile.displayName && profile.displayName.toLowerCase().includes("gurleen")) {
+    avatarPath = "icons/gurleen.jpeg";
   } else if (profile.displayName && profile.displayName.toLowerCase().includes("maneesh")) {
     avatarPath = "icons/maneesh.jpeg";
   } else if (gender === 2) {
