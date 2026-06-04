@@ -19,6 +19,7 @@ const gameOverlay = document.getElementById("gameOverlay");
 const closeGameBtn = document.getElementById("closeGame");
 const startG1Btn = document.getElementById("startG1");
 const startG2Btn = document.getElementById("startG2");
+const startG3Btn = document.getElementById("startG3");
 const gameScoreElem = document.getElementById("gameScore");
 const gameTimerElem = document.getElementById("gameTimer");
 const gameArea = document.getElementById("gameArea");
@@ -30,6 +31,14 @@ const gameOverScreen = document.getElementById("gameOverScreen");
 const finalScoreElem = document.getElementById("finalScore");
 const restartBtn = document.getElementById("restartGame");
 const backToMenuBtn = document.getElementById("backToMenu");
+
+// TANGO UI Elements
+const tangoScreen = document.getElementById("tangoScreen");
+const tangoGridElem = document.getElementById("tangoGrid");
+const tangoTimerElem = document.getElementById("tangoTimer");
+const tangoStatusElem = document.getElementById("tangoStatus");
+const tangoNewBtn = document.getElementById("tangoNew");
+const tangoBackBtn = document.getElementById("tangoBack");
 
 const TARGET_HOURS = 8.25; // 8h 15m
 let autoInterval = null;
@@ -53,8 +62,11 @@ closeGameBtn.addEventListener("click", () => {
 
 startG1Btn.addEventListener("click", () => startGame(1));
 startG2Btn.addEventListener("click", () => startGame(2));
+startG3Btn.addEventListener("click", () => tangoStart());
 restartBtn.addEventListener("click", () => startGame(currentGameType));
 backToMenuBtn.addEventListener("click", resetGame);
+tangoNewBtn.addEventListener("click", () => tangoStart());
+tangoBackBtn.addEventListener("click", () => { tangoStop(); resetGame(); });
 
 gameTarget.addEventListener("click", () => {
   if (currentGameType === 1) {
@@ -82,6 +94,8 @@ function resetGame() {
   gamePaddle.style.display = "none";
   gameHeader.style.display = "none";
   gameOverScreen.style.display = "none";
+  tangoScreen.style.display = "none";
+  tangoStop();
   clearBalls();
   stopGame();
 }
@@ -391,10 +405,233 @@ function stopAutoRefresh() {
   if (liveTimer) clearInterval(liveTimer);
 }
 
+// ========== TANGO GAME ENGINE ==========
+const TANGO_SZ = 6;
+const T_EMPTY = 0, T_SUN = 1, T_MOON = 2;
+const T_CELL = 34, T_GAP = 4, T_STEP = T_CELL + T_GAP;
+const T_PAD = 6; // grid padding
+
+let tGrid = [], tSolution = [], tGiven = [], tConstraints = [];
+let tTimer = null, tSeconds = 0, tActive = false, tWon = false;
+
 // init
 fetchAndRender();
 startAutoRefresh();
 
 window.addEventListener("unload", () => {
   stopAutoRefresh();
+  tangoStop();
 });
+
+function tangoShuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+}
+
+// Generate valid 6×6 solution via backtracking
+function tangoGenSolution() {
+  const g = Array.from({ length: 6 }, () => Array(6).fill(0));
+  function ok(r, c, v) {
+    let rc = 0, cc = 0;
+    for (let i = 0; i < 6; i++) {
+      if (g[r][i] === v) rc++;
+      if (g[i][c] === v) cc++;
+    }
+    if (rc >= 3 || cc >= 3) return false;
+    if (c >= 2 && g[r][c - 1] === v && g[r][c - 2] === v) return false;
+    if (r >= 2 && g[r - 1][c] === v && g[r - 2][c] === v) return false;
+    return true;
+  }
+  function solve(p) {
+    if (p === 36) return true;
+    const r = (p / 6) | 0, c = p % 6;
+    const vs = Math.random() > 0.5 ? [1, 2] : [2, 1];
+    for (const v of vs) {
+      if (ok(r, c, v)) { g[r][c] = v; if (solve(p + 1)) return true; g[r][c] = 0; }
+    }
+    return false;
+  }
+  solve(0);
+  return g;
+}
+
+// Generate constraint markers from solution
+function tangoGenConstraints(sol) {
+  const cands = [];
+  for (let r = 0; r < 6; r++)
+    for (let c = 0; c < 5; c++)
+      cands.push({ r1: r, c1: c, r2: r, c2: c + 1, dir: 'h' });
+  for (let r = 0; r < 5; r++)
+    for (let c = 0; c < 6; c++)
+      cands.push({ r1: r, c1: c, r2: r + 1, c2: c, dir: 'v' });
+  tangoShuffle(cands);
+  const cnt = 5 + Math.floor(Math.random() * 4);
+  const out = [];
+  for (let i = 0; i < Math.min(cnt, cands.length); i++) {
+    const { r1, c1, r2, c2, dir } = cands[i];
+    out.push({ r1, c1, r2, c2, dir, type: sol[r1][c1] === sol[r2][c2] ? '=' : '×' });
+  }
+  return out;
+}
+
+// Create puzzle (remove cells, keep some as given)
+function tangoCreatePuzzle(sol) {
+  const given = Array.from({ length: 6 }, () => Array(6).fill(false));
+  const pos = [];
+  for (let r = 0; r < 6; r++)
+    for (let c = 0; c < 6; c++) pos.push([r, c]);
+  tangoShuffle(pos);
+  const n = 8 + Math.floor(Math.random() * 5);
+  for (let i = 0; i < n; i++) given[pos[i][0]][pos[i][1]] = true;
+  const grid = Array.from({ length: 6 }, () => Array(6).fill(0));
+  for (let r = 0; r < 6; r++)
+    for (let c = 0; c < 6; c++)
+      if (given[r][c]) grid[r][c] = sol[r][c];
+  return { grid, given };
+}
+
+// Validate current grid, return set of error cell keys "r,c"
+function tangoValidate() {
+  const err = new Set();
+  for (let i = 0; i < 6; i++) {
+    let rs = 0, rm = 0, cs = 0, cm = 0;
+    for (let j = 0; j < 6; j++) {
+      if (tGrid[i][j] === T_SUN) rs++; if (tGrid[i][j] === T_MOON) rm++;
+      if (tGrid[j][i] === T_SUN) cs++; if (tGrid[j][i] === T_MOON) cm++;
+    }
+    if (rs > 3) for (let j = 0; j < 6; j++) if (tGrid[i][j] === T_SUN) err.add(`${i},${j}`);
+    if (rm > 3) for (let j = 0; j < 6; j++) if (tGrid[i][j] === T_MOON) err.add(`${i},${j}`);
+    if (cs > 3) for (let j = 0; j < 6; j++) if (tGrid[j][i] === T_SUN) err.add(`${j},${i}`);
+    if (cm > 3) for (let j = 0; j < 6; j++) if (tGrid[j][i] === T_MOON) err.add(`${j},${i}`);
+  }
+  // No 3 in a row
+  for (let r = 0; r < 6; r++) for (let c = 0; c < 4; c++) {
+    if (tGrid[r][c] && tGrid[r][c] === tGrid[r][c + 1] && tGrid[r][c] === tGrid[r][c + 2]) {
+      err.add(`${r},${c}`); err.add(`${r},${c + 1}`); err.add(`${r},${c + 2}`);
+    }
+  }
+  for (let c = 0; c < 6; c++) for (let r = 0; r < 4; r++) {
+    if (tGrid[r][c] && tGrid[r][c] === tGrid[r + 1][c] && tGrid[r][c] === tGrid[r + 2][c]) {
+      err.add(`${r},${c}`); err.add(`${r + 1},${c}`); err.add(`${r + 2},${c}`);
+    }
+  }
+  // Constraints
+  tConstraints.forEach(({ r1, c1, r2, c2, type }) => {
+    if (tGrid[r1][c1] && tGrid[r2][c2]) {
+      if (type === '=' && tGrid[r1][c1] !== tGrid[r2][c2]) { err.add(`${r1},${c1}`); err.add(`${r2},${c2}`); }
+      if (type === '×' && tGrid[r1][c1] === tGrid[r2][c2]) { err.add(`${r1},${c1}`); err.add(`${r2},${c2}`); }
+    }
+  });
+  return err;
+}
+
+function tangoCheckWin() {
+  for (let r = 0; r < 6; r++)
+    for (let c = 0; c < 6; c++)
+      if (tGrid[r][c] === 0) return false;
+  return tangoValidate().size === 0;
+}
+
+// Render the grid
+function tangoRender() {
+  tangoGridElem.innerHTML = '';
+  const errors = tangoValidate();
+  for (let r = 0; r < 6; r++) {
+    for (let c = 0; c < 6; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'tango-cell';
+      if (tGiven[r][c]) cell.classList.add('given');
+      if (tGrid[r][c] === T_SUN) { cell.textContent = '☀️'; cell.classList.add('sun'); }
+      else if (tGrid[r][c] === T_MOON) { cell.textContent = '🌙'; cell.classList.add('moon'); }
+      if (!tWon && errors.has(`${r},${c}`)) cell.classList.add('error');
+      if (tWon) cell.classList.add('win');
+      if (!tGiven[r][c] && !tWon) {
+        const rr = r, cc = c;
+        cell.addEventListener('click', () => tangoCellClick(rr, cc));
+      }
+      tangoGridElem.appendChild(cell);
+    }
+  }
+  // Render constraint markers
+  tConstraints.forEach(({ r1, c1, r2, c2, dir, type }) => {
+    const m = document.createElement('div');
+    m.className = 'tango-marker' + (type === '×' ? ' marker-x' : '');
+    m.textContent = type;
+    if (dir === 'h') {
+      m.style.left = `${T_PAD + c1 * T_STEP + T_CELL + T_GAP / 2}px`;
+      m.style.top = `${T_PAD + r1 * T_STEP + T_CELL / 2}px`;
+    } else {
+      m.style.left = `${T_PAD + c1 * T_STEP + T_CELL / 2}px`;
+      m.style.top = `${T_PAD + r1 * T_STEP + T_CELL + T_GAP / 2}px`;
+    }
+    tangoGridElem.appendChild(m);
+  });
+  // Status
+  const filled = tGrid.flat().filter(v => v !== 0).length;
+  if (tWon) {
+    tangoStatusElem.textContent = `🎉 Solved in ${tangoFmtTime(tSeconds)}!`;
+    tangoStatusElem.className = 'tango-status win-status';
+  } else if (errors.size > 0) {
+    tangoStatusElem.textContent = `⚠️ ${errors.size} conflict${errors.size > 1 ? 's' : ''}`;
+    tangoStatusElem.className = 'tango-status error-status';
+  } else {
+    tangoStatusElem.textContent = `${filled}/36 filled`;
+    tangoStatusElem.className = 'tango-status';
+  }
+}
+
+function tangoCellClick(r, c) {
+  if (tWon || tGiven[r][c]) return;
+  tGrid[r][c] = (tGrid[r][c] + 1) % 3; // 0→1→2→0
+  tangoRender();
+  if (tangoCheckWin()) {
+    tWon = true;
+    tangoStopTimer();
+    tangoRender();
+  }
+}
+
+function tangoFmtTime(s) {
+  return `${(s / 60) | 0}:${String(s % 60).padStart(2, '0')}`;
+}
+
+function tangoStartTimer() {
+  tangoStopTimer();
+  tSeconds = 0;
+  tangoTimerElem.textContent = '0:00';
+  tTimer = setInterval(() => {
+    tSeconds++;
+    tangoTimerElem.textContent = tangoFmtTime(tSeconds);
+  }, 1000);
+}
+
+function tangoStopTimer() {
+  if (tTimer) { clearInterval(tTimer); tTimer = null; }
+}
+
+function tangoStart() {
+  tWon = false;
+  tSolution = tangoGenSolution();
+  tConstraints = tangoGenConstraints(tSolution);
+  const { grid, given } = tangoCreatePuzzle(tSolution);
+  tGrid = grid;
+  tGiven = given;
+  tActive = true;
+  // Hide other game elements
+  gameStartScreen.style.display = 'none';
+  gameHeader.style.display = 'none';
+  gameTarget.style.display = 'none';
+  gamePaddle.style.display = 'none';
+  gameOverScreen.style.display = 'none';
+  tangoScreen.style.display = 'block';
+  tangoStartTimer();
+  tangoRender();
+}
+
+function tangoStop() {
+  tActive = false;
+  tangoStopTimer();
+  tangoScreen.style.display = 'none';
+}

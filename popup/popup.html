@@ -59,11 +59,26 @@
           <div class="game-options">
             <button id="startG1" class="btn">Game 1: Catch ⏰</button>
             <button id="startG2" class="btn ghost">Game 2: Bounce ⏰</button>
+            <button id="startG3" class="btn ghost">Game 3: Tango 🔆</button>
           </div>
-          <p class="game-hint">G1: Click them! | G2: Use mouse to block!</p>
+          <p class="game-hint">G1: Click them! | G2: Mouse block! | G3: Logic puzzle!</p>
         </div>
         <div id="gameTarget" class="game-target" style="display: none">⏰</div>
         <div id="gamePaddle" class="game-paddle" style="display: none"></div>
+
+        <!-- Tango Game Screen -->
+        <div id="tangoScreen" class="game-menu tango-screen" style="display: none">
+          <div class="tango-header">
+            <h3>🔆 Tango 🌙</h3>
+            <div id="tangoTimer" class="tango-timer">0:00</div>
+          </div>
+          <div id="tangoGrid" class="tango-grid"></div>
+          <div id="tangoStatus" class="tango-status"></div>
+          <div class="game-options tango-actions">
+            <button id="tangoNew" class="btn">🎲 New Puzzle</button>
+            <button id="tangoBack" class="btn ghost">🏠 Menu</button>
+          </div>
+        </div>
         
         <!-- Custom Game Over Screen -->
         <div id="gameOverScreen" class="game-menu" style="display: none">
