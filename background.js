@@ -287,7 +287,8 @@ async function fetchKekaData() {
     stayTill =
       remaining > 0
         ? new Date(Date.now() + remaining * 3_600_000)
-          .toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+ 
+        .toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
         : "Done ✅";
   }
 
@@ -323,7 +324,7 @@ async function fetchProfile() {
   );
 
   if (!resp.ok) throw new Error("Profile API error");
-
+h
   const d = (await resp.json()).data;
 
   return {
