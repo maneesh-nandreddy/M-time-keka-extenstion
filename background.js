@@ -1,5 +1,5 @@
 // background.js (MV3 service worker)
-const TARGET_HOURS = 8.25;
+const TARGET_HOURS = 8.25; // 8h 15m
 let cachedToken = null;
 
 // Periodic background check so the celebration fires even if the popup
@@ -128,11 +128,17 @@ async function fetchKekaData() {
         : "Done ✅";
   }
 
+  // 🚶 Break = time elapsed today that wasn't counted as effective work
+  // (gross span minus actual worked time).
+  const breakHours = Math.max(0, gross - total);
+
   return {
     hours: +total.toFixed(3),
     gross: +gross.toFixed(3),
+    breakHours: +breakHours.toFixed(3),
     pretty: toHHMM(total),
     grossPretty: toHHMM(gross),
+    breakPretty: toHHMM(breakHours),
     stayTill,
     isCurrentlyIn: isIn,
     lastPunchIn: lastPunchIn?.toISOString() || null,
@@ -151,37 +157,78 @@ function todayKey() {
 
 async function maybeCelebrate(hours) {
   if (!hours || typeof hours.hours !== "number") return;
+  console.log(`[keka-bg] hours=${hours.hours.toFixed(3)} target=${TARGET_HOURS.toFixed(3)}`);
   if (hours.hours < TARGET_HOURS) return;
 
   const { celebratedOn } = await chrome.storage.local.get("celebratedOn");
   const today = todayKey();
   if (celebratedOn === today) return; // already blasted today
 
-  await chrome.storage.local.set({ celebratedOn: today });
-  await blastConfettiOnActiveTab();
+  // Only mark today as "celebrated" once the blast actually fires on a real
+  // tab — otherwise (e.g. the active tab is chrome://extensions while you're
+  // debugging) we'd silently burn the one-per-day flag with no confetti shown.
+  const fired = await blastConfettiOnActiveTab();
+  if (fired) {
+    await chrome.storage.local.set({ celebratedOn: today });
+    console.log("[keka-bg] confetti fired");
+  } else {
+    console.warn("[keka-bg] confetti NOT fired — no eligible tab found, will retry next check");
+  }
+}
+
+async function getBlastTargetTab() {
+  // Prefer the active tab of the last focused *normal* browser window
+  // (this excludes the extension's own popup window).
+  try {
+    const win = await chrome.windows.getLastFocused({ windowTypes: ["normal"] });
+    const [activeTab] = await chrome.tabs.query({ active: true, windowId: win.id });
+    if (activeTab && activeTab.id && /^https?:/.test(activeTab.url || "")) return activeTab;
+  } catch (err) {
+    // ignore and fall through to the broader search below
+  }
+
+  // Fallback: any active tab, in any window, that's a real http(s) page.
+  const activeTabs = await chrome.tabs.query({ active: true });
+  const httpActive = activeTabs.find(t => t.id && /^https?:/.test(t.url || ""));
+  if (httpActive) return httpActive;
+
+  // Last resort: the KEKA tab itself, even if it's not focused right now.
+  const [kekaTab] = await chrome.tabs.query({ url: "https://*.keka.com/*" });
+  return kekaTab || null;
 }
 
 async function blastConfettiOnActiveTab() {
   try {
-    const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-    if (!tab || !tab.id || !/^https?:/.test(tab.url || "")) return;
+    const tab = await getBlastTargetTab();
+    if (!tab || !tab.id) return false;
+
+    const soundUrl = chrome.runtime.getURL("sounds/dragon-studio-wow-423653.mp3");
 
     await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      func: confettiBlastInPage
+      func: confettiBlastInPage,
+      args: [soundUrl]
     });
+    return true;
   } catch (err) {
     console.warn("[keka-bg] confetti injection failed", err);
+    return false;
   }
 }
 
-// Injected into the page. Must be self-contained (no outside references).
-function confettiBlastInPage() {
+// Injected into the page. Must be self-contained (no outside references other
+// than the `soundUrl` arg chrome.scripting passes in).
+// Fires 3 staggered confetti waves, each with the celebration sound played
+// at full volume, spanning ~3-4 seconds before everything fades out.
+function confettiBlastInPage(soundUrl) {
   if (document.getElementById("__keka_confetti_root")) return; // avoid double-fire
 
   const COLORS = ["#ff4d6d", "#ffd23f", "#06d6a0", "#118ab2", "#a06cd5", "#ff8c42"];
-  const COUNT = 140;
-  const DURATION_MS = 3800;
+  const WAVES = 3;
+  const PER_WAVE = 70;
+  const WAVE_GAP_MS = 1300; // time between successive blasts
+  const TAIL_MS = 1900; // extra fall/fade time after the last wave
+  const TOTAL_MS = (WAVES - 1) * WAVE_GAP_MS + TAIL_MS;
 
   const canvas = document.createElement("canvas");
   canvas.id = "__keka_confetti_root";
@@ -192,32 +239,60 @@ function confettiBlastInPage() {
   document.documentElement.appendChild(canvas);
 
   const ctx = canvas.getContext("2d");
-  const W = canvas.width, H = canvas.height;
+  let W = canvas.width, H = canvas.height;
 
-  const pieces = Array.from({ length: COUNT }, () => {
-    const fromLeft = Math.random() < 0.5;
-    return {
-      x: fromLeft ? -10 : W + 10,
-      y: H * (0.35 + Math.random() * 0.4),
-      vx: (fromLeft ? 1 : -1) * (6 + Math.random() * 10),
-      vy: -(8 + Math.random() * 10),
-      g: 0.28 + Math.random() * 0.12,
-      size: 5 + Math.random() * 6,
-      color: COLORS[(Math.random() * COLORS.length) | 0],
-      rot: Math.random() * Math.PI,
-      vr: (Math.random() - 0.5) * 0.4,
-      shape: Math.random() < 0.5 ? "rect" : "circle"
-    };
-  });
+  let pieces = [];
+  function spawnWave() {
+    for (let i = 0; i < PER_WAVE; i++) {
+      const fromLeft = Math.random() < 0.5;
+      pieces.push({
+        x: fromLeft ? -10 : W + 10,
+        y: H * (0.3 + Math.random() * 0.45),
+        vx: (fromLeft ? 1 : -1) * (6 + Math.random() * 10),
+        vy: -(8 + Math.random() * 10),
+        g: 0.28 + Math.random() * 0.12,
+        size: 5 + Math.random() * 6,
+        color: COLORS[(Math.random() * COLORS.length) | 0],
+        rot: Math.random() * Math.PI,
+        vr: (Math.random() - 0.5) * 0.4,
+        shape: Math.random() < 0.5 ? "rect" : "circle"
+      });
+    }
+  }
+
+  // ---- celebration sound: play the real audio file at full volume ----
+  function playCelebrationSound() {
+    if (!soundUrl) return;
+    try {
+      const audio = new Audio(soundUrl);
+      audio.volume = 1.0;
+      // Autoplay needs the tab to already have some user interaction;
+      // if it's blocked, just skip the sound and keep the confetti going.
+      audio.play().catch(() => { });
+    } catch (err) {
+      // audio is best-effort only; never block the visual blast on it
+    }
+  }
 
   const start = performance.now();
   let rafId = null;
+  let waveIdx = 0;
+
+  function maybeSpawnWaves(elapsed) {
+    while (waveIdx < WAVES && elapsed >= waveIdx * WAVE_GAP_MS) {
+      spawnWave();
+      playCelebrationSound();
+      waveIdx++;
+    }
+  }
 
   function frame(now) {
     const elapsed = now - start;
+    maybeSpawnWaves(elapsed);
+
     ctx.clearRect(0, 0, W, H);
 
-    const fadeStart = DURATION_MS - 800;
+    const fadeStart = TOTAL_MS - 800;
     const alpha = elapsed > fadeStart ? Math.max(0, 1 - (elapsed - fadeStart) / 800) : 1;
 
     for (const p of pieces) {
@@ -241,7 +316,7 @@ function confettiBlastInPage() {
       ctx.restore();
     }
 
-    if (elapsed < DURATION_MS) {
+    if (elapsed < TOTAL_MS) {
       rafId = requestAnimationFrame(frame);
     } else {
       cleanup();
@@ -255,14 +330,14 @@ function confettiBlastInPage() {
   }
 
   function onResize() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    W = canvas.width = window.innerWidth;
+    H = canvas.height = window.innerHeight;
   }
   window.addEventListener("resize", onResize);
 
   rafId = requestAnimationFrame(frame);
   // Safety net in case rAF stalls on a backgrounded tab
-  setTimeout(cleanup, DURATION_MS + 1000);
+  setTimeout(cleanup, TOTAL_MS + 1200);
 }
 
 function toHHMM(decimal) {

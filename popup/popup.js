@@ -6,6 +6,7 @@ const progressFill = document.getElementById("progressFill");
 const progressLabel = document.getElementById("progressLabel");
 const debugElem = document.getElementById("debug");
 const grossElem = document.getElementById("gross");
+const breakElem = document.getElementById("breakTime");
 const kekaBtn = document.getElementById("kekaLogs");
 
 // PROFILE UI Elements
@@ -306,6 +307,9 @@ function renderData(data) {
 
   // Static fields
   grossElem.innerHTML = `<span>🧩</span> <b>Gross:</b> ${hours.grossPretty}`;
+  if (breakElem) {
+    breakElem.innerHTML = `<span>🚶</span> <b>Break:</b> ${hours.breakPretty || "—"}`;
+  }
 
   if (hours.isCurrentlyIn && hours.lastPunchInMs) {
     startLiveTick(hours.baseHours, hours.lastPunchInMs);
