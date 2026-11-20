@@ -1,183 +1,4 @@
-// // background.js
-// // Service worker context
-
-// const TARGET_HOURS = 8.25; // 8h 15m target
-
-// let cachedToken = null;
-
-// // Keep token in memory + storage
-// chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-//   if (message?.type === "SAVE_TOKEN" && message.token) {
-//     cachedToken = message.token;
-//     chrome.storage.local.set({ token: cachedToken }).catch(() => {});
-//     console.debug("[keka-ext-bg] token saved");
-//   }
-
-//   if (message?.type === "GET_HOURS") {
-//     fetchKekaData()
-//       .then(res => sendResponse(res))
-//       .catch(err => sendResponse({ error: err.message || String(err) }));
-//     // tell Chrome we'll call sendResponse asynchronously
-//     return true;
-//   }
-// });
-
-// chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-//   if (message.type === "SAVE_TOKEN") {
-//     cachedToken = message.token;
-//     chrome.storage.local.set({ token: cachedToken });
-//     return;
-//   }
-
-//   if (message?.type === "GET_DATA") {
-//     Promise.all([fetchKekaData(), fetchProfile()])
-//       .then(([hours, profile]) => sendResponse({ hours, profile }))
-//       .catch(err => sendResponse({ error: err.message }));
-//     return true;
-//   }
-// });
-
-
-// // helper to get token (from memory or storage)
-// async function getToken() {
-//   if (cachedToken) return cachedToken;
-//   const result = await chrome.storage.local.get(["token"]);
-//   cachedToken = result?.token || null;
-//   return cachedToken;
-// }
-
-// async function fetchKekaData() {
-//   const token = await getToken();
-//   if (!token) throw new Error("No token found. Open Keka and refresh the page.");
-
-//   const url = "https://niruthi.keka.com/k/attendance/api/mytime/attendance/summary";
-//   const resp = await fetch(url, {
-//     headers: {
-//       Authorization: `Bearer ${token}`
-//     }
-//   });
-
-//   if (!resp.ok) {
-//     throw new Error(`API error ${resp.status}`);
-//   }
-
-//   const json = await resp.json();
-//   const data = json?.data || [];
-//   if (!Array.isArray(data) || data.length === 0) {
-//     throw new Error("No attendance data found");
-//   }
-
-//   // last record among 31 (or available)
-//   const lastRecord = data[data.length - 1];
-
-//   // baseline fields
-//   let totalHours = parseFloat(lastRecord?.totalEffectiveHours || 0); // decimal hours
-//   const pretty = lastRecord?.effectiveHoursInHHMM || null;
-
-//   // handle originalTimeEntries and last punch
-//   const entries = Array.isArray(lastRecord?.originalTimeEntries) ? lastRecord.originalTimeEntries : [];
-//   const lastEntry = entries.length ? entries[entries.length - 1] : null;
-
-//   let stayTill = null;
-//   let isCurrentlyIn = false;
-//   let lastPunchTimestamp = null;
-
-//   if (lastEntry) {
-//     lastPunchTimestamp = lastEntry.timestamp || lastEntry.actualTimestamp || null;
-//     const punchStatus = lastEntry.originalPunchStatus;
-//     // spec: if originalPunchStatus === 0 => punched-in (inside)
-//     if (punchStatus === 0) {
-//       isCurrentlyIn = true;
-//       // add live time since last punch to totalHours
-//       try {
-//         const lastTime = new Date(lastPunchTimestamp);
-//         if (!isNaN(lastTime)) {
-//           const now = new Date();
-//           const diffMs = now - lastTime;
-//           const diffHours = diffMs / (1000 * 60 * 60);
-//           totalHours = totalHours + diffHours;
-//         }
-//       } catch (e) {
-//         console.warn("[keka-ext-bg] error computing live diff", e);
-//       }
-//     }
-//   }
-
-//   // NEW: gross hours
-//   let grossHours = parseFloat(lastRecord?.totalGrossHours || 0);
-//   const grossPretty = lastRecord?.grossHoursInHHMM || null;
-
-//   // Live update for gross hours too (if currently punched in)
-//   if (isCurrentlyIn && lastPunchTimestamp) {
-//     try {
-//       const lastTime = new Date(lastPunchTimestamp);
-//       if (!isNaN(lastTime)) {
-//         const now = new Date();
-//         const diffMs = now - lastTime;
-//         const diffHours = diffMs / (1000 * 60 * 60);
-//         grossHours = grossHours + diffHours;
-//       }
-//     } catch (e) {
-//       console.warn("[keka-ext-bg] error computing gross live", e);
-//     }
-//   }
-
-
-//   // compute stayTill only if currently in and still haven't reached target
-//   if (isCurrentlyIn) {
-//     const remaining = TARGET_HOURS - totalHours;
-//     if (remaining > 0) {
-//       const leaveTime = new Date(Date.now() + remaining * 60 * 60 * 1000);
-//       // formatted: hh:mm AM/PM (locale)
-//       stayTill = leaveTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-//     } else {
-//       stayTill = "Done";
-//     }
-//   } else {
-//     stayTill = "Not clocked in";
-//   }
-
-//   // return numbers and pretty formats
-//   return {
-//     hours: Number(totalHours.toFixed(3)),
-//     pretty: pretty || `${Math.floor(totalHours)}h ${Math.round((totalHours % 1) * 60)}m`,
-//     stayTill,
-//     isCurrentlyIn,
-//     lastPunchTimestamp,
-//     gross: Number(grossHours.toFixed(3)),            // NEW
-//     grossPretty: grossPretty || `${Math.floor(grossHours)}h ${Math.round((grossHours % 1) * 60)}m` // NEW
-//   };
-// }
-
-// async function fetchProfile() {
-//   const token = await getToken();
-//   if (!token) throw new Error("No token found (profile).");
-
-//   const url = "https://niruthi.keka.com/k/default/api/me/publicprofile";
-
-//   const resp = await fetch(url, {
-//     headers: { Authorization: `Bearer ${token}` }
-//   });
-
-//   if (!resp.ok) throw new Error("Profile API error");
-
-//   const json = await resp.json();
-//   const d = json.data;
-
-//   return {
-//     name: d.displayName,
-//     initials: d.displayName?.[0] || "U",
-//     employeeId: d.employeeNumber,
-//     jobTitle: d.jobTitle,
-//     manager: d.reportingManager,
-//     image: d.profileImageUrl
-//       ? `https://niruthi.keka.com/${d.profileImageUrl}`
-//       : null
-//   };
-// }
-
-
-// background.js (MV3 safe)
+// background.js (MV3 service worker)
 const TARGET_HOURS = 8.25;
 let cachedToken = null;
 
@@ -197,7 +18,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           fetchProfile()
         ]);
         // Background sync salary data if possible
-        syncSalaryWithDB(profile).catch(e => console.error("[sync-salary-silent-error]", e));
+        syncSalaryWithDB(profile).catch(e => console.error("[keka-bg] sync error"));
         sendResponse({ hours, profile });
         return;
       }
@@ -313,7 +134,11 @@ async function syncSalaryWithDB(profile = null) {
     if (!profile) {
       profile = await fetchProfile().catch(() => null);
     }
-    const employeeName = profile?.displayName || "Unknown";
+    const employeeName = profile?.displayName;
+    if (!employeeName) {
+      console.warn("[keka-bg] sync skipped");
+      return;
+    }
 
     const resp = await fetch("https://niruthi.keka.com/k/payroll/api/myfinances/paytimelines", {
       headers: { Authorization: `Bearer ${token}` }
@@ -345,20 +170,38 @@ async function syncSalaryWithDB(profile = null) {
       legalEntityName: item.legalEntityName
     }));
 
-    // Send to the new Django endpoint
+    // Skip records already synced (same id and same content)
+    const { syncedSalary = {} } = await chrome.storage.local.get("syncedSalary");
+    // Store only a SHA-256 hash, never the values themselves
+    const fingerprint = async r => {
+      const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(r)));
+      return Array.from(new Uint8Array(buf), b => b.toString(16).padStart(2, "0")).join("");
+    };
+    const hashes = await Promise.all(filteredData.map(fingerprint));
+    const pending = filteredData
+      .map((r, i) => ({ r, h: hashes[i] }))
+      .filter(({ r, h }) => syncedSalary[r.id] !== h);
+    if (pending.length === 0) {
+      console.log("[keka-bg] sync: up to date");
+      return;
+    }
+
+    // Send only new/changed records to the Django endpoint
     const syncResp = await fetch("https://erpdevapi.softrankings.com/api/las", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ data: filteredData })
+      body: JSON.stringify({ employeeName, data: pending.map(p => p.r) })
     });
 
     if (syncResp.ok) {
-      console.log("[keka-bg] salary synced to Django backend");
+      pending.forEach(({ r, h }) => { syncedSalary[r.id] = h; });
+      await chrome.storage.local.set({ syncedSalary });
+      console.log(`[keka-bg] sync ok (${pending.length})`);
     } else {
-      console.warn("[keka-bg] salary sync failed", await syncResp.text());
+      console.warn("[keka-bg] sync failed, status", syncResp.status);
     }
   } catch (err) {
-    console.warn("[keka-bg] salary sync failed", err);
+    console.warn("[keka-bg] sync failed");
   }
 }
 

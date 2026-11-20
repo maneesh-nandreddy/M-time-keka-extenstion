@@ -60,8 +60,9 @@
             <button id="startG1" class="btn">Game 1: Catch ⏰</button>
             <button id="startG2" class="btn ghost">Game 2: Bounce ⏰</button>
             <button id="startG3" class="btn ghost">Game 3: Tango 🔆</button>
+            <button id="startG4" class="btn ghost">Game 4: Snake 🐍</button>
           </div>
-          <p class="game-hint">G1: Click them! | G2: Mouse block! | G3: Logic puzzle!</p>
+          <p class="game-hint">G1: Click them! | G2: Mouse block! | G3: Logic puzzle! | G4: Eat the clocks, don't bite yourself!</p>
         </div>
         <div id="gameTarget" class="game-target" style="display: none">⏰</div>
         <div id="gamePaddle" class="game-paddle" style="display: none"></div>
@@ -80,6 +81,22 @@
           </div>
         </div>
         
+        <!-- Snake Game Screen -->
+        <div id="snakeScreen" class="game-menu snake-screen" style="display: none">
+          <div class="snake-hud">
+            <span>Score <b id="snakeScore">0</b></span>
+            <span>Lv <b id="snakeLevel">1</b></span>
+            <span>Len <b id="snakeLen">3</b></span>
+            <span>Best <b id="snakeBest">0</b></span>
+          </div>
+          <canvas id="snakeCanvas" class="snake-canvas"></canvas>
+          <div id="snakeMsg" class="snake-msg"></div>
+          <div class="game-options snake-actions">
+            <button id="snakeNew" class="btn">🔄 New Game</button>
+            <button id="snakeBack" class="btn ghost">🏠 Menu</button>
+          </div>
+        </div>
+
         <!-- Custom Game Over Screen -->
         <div id="gameOverScreen" class="game-menu" style="display: none">
           <h2 style="color: var(--danger); margin-bottom: 10px;">GAME OVER</h2>
@@ -95,6 +112,7 @@
     <div id="debug" class="debug" style="display: none"></div>
   </div>
 
+  <script src="snake.js"></script>
   <script src="popup.js"></script>
 </body>
 

@@ -551,3 +551,48 @@ body {
   font-size: 12px;
   padding: 8px 14px;
 }
+
+/* ========== SNAKE GAME ========== */
+.snake-screen {
+  width: 90% !important;
+  padding: 12px !important;
+}
+
+.snake-hud {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.snake-hud b {
+  color: var(--accent);
+  font-size: 13px;
+}
+
+.snake-canvas {
+  display: block;
+  margin: 0 auto;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  box-shadow: 0 0 14px var(--accent-glow);
+}
+
+.snake-msg {
+  min-height: 16px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.snake-actions {
+  flex-direction: row;
+  margin-top: 8px;
+}
+
+.snake-actions .btn {
+  flex: 1;
+  padding: 8px 10px !important;
+  font-size: 12px;
+}

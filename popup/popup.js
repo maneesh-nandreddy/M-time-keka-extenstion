@@ -20,6 +20,8 @@ const closeGameBtn = document.getElementById("closeGame");
 const startG1Btn = document.getElementById("startG1");
 const startG2Btn = document.getElementById("startG2");
 const startG3Btn = document.getElementById("startG3");
+const startG4Btn = document.getElementById("startG4");
+const snakeBackBtn = document.getElementById("snakeBack");
 const gameScoreElem = document.getElementById("gameScore");
 const gameTimerElem = document.getElementById("gameTimer");
 const gameArea = document.getElementById("gameArea");
@@ -57,12 +59,15 @@ playGameBtn.addEventListener("click", () => {
 closeGameBtn.addEventListener("click", () => {
   gameOverlay.style.display = "none";
   stopGame();
+  if (window.snakeStop) window.snakeStop();
   fetchAndRender(); // Ensure logs are fresh
 });
 
 startG1Btn.addEventListener("click", () => startGame(1));
 startG2Btn.addEventListener("click", () => startGame(2));
 startG3Btn.addEventListener("click", () => tangoStart());
+startG4Btn.addEventListener("click", () => { gameStartScreen.style.display = "none"; window.snakeStart(); });
+snakeBackBtn.addEventListener("click", resetGame);
 restartBtn.addEventListener("click", () => startGame(currentGameType));
 backToMenuBtn.addEventListener("click", resetGame);
 tangoNewBtn.addEventListener("click", () => tangoStart());
@@ -96,6 +101,7 @@ function resetGame() {
   gameOverScreen.style.display = "none";
   tangoScreen.style.display = "none";
   tangoStop();
+  if (window.snakeStop) window.snakeStop();
   clearBalls();
   stopGame();
 }
@@ -421,6 +427,7 @@ startAutoRefresh();
 window.addEventListener("unload", () => {
   stopAutoRefresh();
   tangoStop();
+  if (window.snakeStop) window.snakeStop();
 });
 
 function tangoShuffle(a) {
