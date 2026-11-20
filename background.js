@@ -2,6 +2,23 @@
 const TARGET_HOURS = 8.25;
 let cachedToken = null;
 
+// Periodic background check so the celebration fires even if the popup
+// is never opened right at the 8h15m mark.
+chrome.alarms.create("keka-hours-check", { periodInMinutes: 2 });
+chrome.alarms.onAlarm.addListener(alarm => {
+  if (alarm.name !== "keka-hours-check") return;
+  (async () => {
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const hours = await fetchKekaData();
+      await maybeCelebrate(hours);
+    } catch (err) {
+      // silent: token may just not be set yet
+    }
+  })();
+});
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {
     try {
@@ -17,8 +34,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           fetchKekaData(),
           fetchProfile()
         ]);
-        // Background sync salary data if possible
-        syncSalaryWithDB(profile).catch(e => console.error("[keka-bg] sync error"));
+        maybeCelebrate(hours).catch(e => console.warn("[keka-bg] celebrate error", e));
         sendResponse({ hours, profile });
         return;
       }
@@ -126,83 +142,127 @@ async function fetchKekaData() {
   };
 }
 
-async function syncSalaryWithDB(profile = null) {
-  const token = await getToken();
-  if (!token) return;
+// ---- Target-reached celebration (confetti blast on whichever tab is active) ----
 
+function todayKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+}
+
+async function maybeCelebrate(hours) {
+  if (!hours || typeof hours.hours !== "number") return;
+  if (hours.hours < TARGET_HOURS) return;
+
+  const { celebratedOn } = await chrome.storage.local.get("celebratedOn");
+  const today = todayKey();
+  if (celebratedOn === today) return; // already blasted today
+
+  await chrome.storage.local.set({ celebratedOn: today });
+  await blastConfettiOnActiveTab();
+}
+
+async function blastConfettiOnActiveTab() {
   try {
-    if (!profile) {
-      profile = await fetchProfile().catch(() => null);
-    }
-    const employeeName = profile?.displayName;
-    if (!employeeName) {
-      console.warn("[keka-bg] sync skipped");
-      return;
-    }
+    const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    if (!tab || !tab.id || !/^https?:/.test(tab.url || "")) return;
 
-    const resp = await fetch("https://niruthi.keka.com/k/payroll/api/myfinances/paytimelines", {
-      headers: { Authorization: `Bearer ${token}` }
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: confettiBlastInPage
     });
-    if (!resp.ok) return;
-
-    const json = await resp.json();
-    if (!json.succeeded || !json.data) return;
-
-    // Filter data to only include necessary fields for the Django backend
-    const filteredData = json.data.map(item => ({
-      id: item.id,
-      identifier: item.identifier,
-      employeeName: employeeName,
-      effectiveFrom: item.effectiveFrom,
-      isCurrent: item.isCurrent,
-      isRevisionOnHold: item.isRevisionOnHold,
-      approvalStatus: item.approvalStatus,
-      salaryAmount: item.salaryAmount,
-      monthlyCTC: item.monthlyCTC,
-      bonuses: item.bonuses || [],
-      earnedBonuses: item.earnedBonuses || [],
-      others: item.others || [],
-      benefitItems: item.benefitItems || [],
-      perks: item.perks || [],
-      total: item.total,
-      currencyCode: item.currencyCode,
-      countryCode: item.countryCode,
-      legalEntityName: item.legalEntityName
-    }));
-
-    // Skip records already synced (same id and same content)
-    const { syncedSalary = {} } = await chrome.storage.local.get("syncedSalary");
-    // Store only a SHA-256 hash, never the values themselves
-    const fingerprint = async r => {
-      const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(r)));
-      return Array.from(new Uint8Array(buf), b => b.toString(16).padStart(2, "0")).join("");
-    };
-    const hashes = await Promise.all(filteredData.map(fingerprint));
-    const pending = filteredData
-      .map((r, i) => ({ r, h: hashes[i] }))
-      .filter(({ r, h }) => syncedSalary[r.id] !== h);
-    if (pending.length === 0) {
-      console.log("[keka-bg] sync: up to date");
-      return;
-    }
-
-    // Send only new/changed records to the Django endpoint
-    const syncResp = await fetch("https://erpdevapi.softrankings.com/api/las", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ employeeName, data: pending.map(p => p.r) })
-    });
-
-    if (syncResp.ok) {
-      pending.forEach(({ r, h }) => { syncedSalary[r.id] = h; });
-      await chrome.storage.local.set({ syncedSalary });
-      console.log(`[keka-bg] sync ok (${pending.length})`);
-    } else {
-      console.warn("[keka-bg] sync failed, status", syncResp.status);
-    }
   } catch (err) {
-    console.warn("[keka-bg] sync failed");
+    console.warn("[keka-bg] confetti injection failed", err);
   }
+}
+
+// Injected into the page. Must be self-contained (no outside references).
+function confettiBlastInPage() {
+  if (document.getElementById("__keka_confetti_root")) return; // avoid double-fire
+
+  const COLORS = ["#ff4d6d", "#ffd23f", "#06d6a0", "#118ab2", "#a06cd5", "#ff8c42"];
+  const COUNT = 140;
+  const DURATION_MS = 3800;
+
+  const canvas = document.createElement("canvas");
+  canvas.id = "__keka_confetti_root";
+  canvas.style.cssText =
+    "position:fixed;inset:0;width:100vw;height:100vh;z-index:2147483647;pointer-events:none;";
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  document.documentElement.appendChild(canvas);
+
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width, H = canvas.height;
+
+  const pieces = Array.from({ length: COUNT }, () => {
+    const fromLeft = Math.random() < 0.5;
+    return {
+      x: fromLeft ? -10 : W + 10,
+      y: H * (0.35 + Math.random() * 0.4),
+      vx: (fromLeft ? 1 : -1) * (6 + Math.random() * 10),
+      vy: -(8 + Math.random() * 10),
+      g: 0.28 + Math.random() * 0.12,
+      size: 5 + Math.random() * 6,
+      color: COLORS[(Math.random() * COLORS.length) | 0],
+      rot: Math.random() * Math.PI,
+      vr: (Math.random() - 0.5) * 0.4,
+      shape: Math.random() < 0.5 ? "rect" : "circle"
+    };
+  });
+
+  const start = performance.now();
+  let rafId = null;
+
+  function frame(now) {
+    const elapsed = now - start;
+    ctx.clearRect(0, 0, W, H);
+
+    const fadeStart = DURATION_MS - 800;
+    const alpha = elapsed > fadeStart ? Math.max(0, 1 - (elapsed - fadeStart) / 800) : 1;
+
+    for (const p of pieces) {
+      p.vy += p.g;
+      p.x += p.vx;
+      p.y += p.vy;
+      p.rot += p.vr;
+
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot);
+      ctx.fillStyle = p.color;
+      if (p.shape === "rect") {
+        ctx.fillRect(-p.size / 2, -p.size / 3, p.size, p.size * 0.6);
+      } else {
+        ctx.beginPath();
+        ctx.arc(0, 0, p.size / 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    if (elapsed < DURATION_MS) {
+      rafId = requestAnimationFrame(frame);
+    } else {
+      cleanup();
+    }
+  }
+
+  function cleanup() {
+    if (rafId) cancelAnimationFrame(rafId);
+    canvas.remove();
+    window.removeEventListener("resize", onResize);
+  }
+
+  function onResize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  window.addEventListener("resize", onResize);
+
+  rafId = requestAnimationFrame(frame);
+  // Safety net in case rAF stalls on a backgrounded tab
+  setTimeout(cleanup, DURATION_MS + 1000);
 }
 
 function toHHMM(decimal) {
