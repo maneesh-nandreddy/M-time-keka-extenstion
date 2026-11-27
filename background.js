@@ -2,6 +2,29 @@
 const TARGET_HOURS = 8.25; // 8h 15m
 let cachedToken = null;
 
+const AUTH_MSG = "Session expired. Open Keka once to refresh.";
+
+class AuthError extends Error {
+  constructor(msg = AUTH_MSG) {
+    super(msg);
+    this.name = "AuthError";
+  }
+}
+
+// Drop an expired/invalid token so we stop hammering the API with it.
+async function clearToken() {
+  cachedToken = null;
+  try { await chrome.storage.local.remove("token"); } catch (e) { /* ignore */ }
+}
+
+// Throws AuthError (and clears the token) on 401/403.
+async function checkAuth(resp) {
+  if (resp.status === 401 || resp.status === 403) {
+    await clearToken();
+    throw new AuthError();
+  }
+}
+
 // Periodic background check so the celebration fires even if the popup
 // is never opened right at the 8h15m mark.
 chrome.alarms.create("keka-hours-check", { periodInMinutes: 2 });
@@ -14,7 +37,8 @@ chrome.alarms.onAlarm.addListener(alarm => {
       const hours = await fetchKekaData();
       await maybeCelebrate(hours);
     } catch (err) {
-      // silent: token may just not be set yet
+      // silent: token missing/expired or transient network error
+      if (!(err instanceof AuthError)) console.warn("[keka-bg] alarm check failed:", err.message);
     }
   })();
 });
@@ -41,7 +65,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       sendResponse({ error: "Unknown message type" });
     } catch (err) {
-      console.error("[keka-bg-error]", err);
+      // Expected states (expired/missing token) are not real errors.
+      if (err instanceof AuthError) console.warn("[keka-bg]", err.message);
+      else console.warn("[keka-bg] request failed:", err);
       sendResponse({ error: err.message || String(err) });
     }
   })();
@@ -58,13 +84,14 @@ async function getToken() {
 
 async function fetchKekaData() {
   const token = await getToken();
-  if (!token) throw new Error("No token found. Open Keka once.");
+  if (!token) throw new AuthError("No token found. Open Keka once.");
 
   const resp = await fetch(
     "https://niruthi.keka.com/k/attendance/api/mytime/attendance/summary",
     { headers: { Authorization: `Bearer ${token}` } }
   );
 
+  await checkAuth(resp);
   if (!resp.ok) throw new Error(`Attendance API ${resp.status}`);
 
   const json = await resp.json();
@@ -348,13 +375,14 @@ function toHHMM(decimal) {
 
 async function fetchProfile() {
   const token = await getToken();
-  if (!token) throw new Error("No token found (profile)");
+  if (!token) throw new AuthError("No token found. Open Keka once.");
 
   const resp = await fetch(
     "https://niruthi.keka.com/k/default/api/me/publicprofile",
     { headers: { Authorization: `Bearer ${token}` } }
   );
 
+  await checkAuth(resp);
   if (!resp.ok) throw new Error("Profile API error");
 
   const d = (await resp.json()).data;
